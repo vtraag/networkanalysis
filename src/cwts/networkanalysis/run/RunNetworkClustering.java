@@ -2,8 +2,11 @@ package cwts.networkanalysis.run;
 
 import cwts.networkanalysis.Clustering;
 import cwts.networkanalysis.CPMClusteringAlgorithm;
+import cwts.networkanalysis.Cover;
 import cwts.networkanalysis.IterativeCPMClusteringAlgorithm;
+import cwts.networkanalysis.IterativeCPMClusteringAlgorithmLabeledTargetCover;
 import cwts.networkanalysis.LeidenAlgorithm;
+import cwts.networkanalysis.LeidenAlgorithmLabeledTargetCover;
 import cwts.networkanalysis.LouvainAlgorithm;
 import cwts.networkanalysis.Network;
 import cwts.util.DynamicDoubleArray;
@@ -63,6 +66,10 @@ public final class RunNetworkClustering
     public static final double DEFAULT_RANDOMNESS = LeidenAlgorithm.DEFAULT_RANDOMNESS;
 
     /**
+     * Default target clustering weight
+     */
+    public static final double DEFAULT_TARGET_CLUSTERING_WEIGHT = 1.0;
+    /**
      * Description text.
      */
     public static final String DESCRIPTION
@@ -115,6 +122,17 @@ public final class RunNetworkClustering
           + "    by zero-index integer numbers. If no file is specified, a singleton\n"
           + "    clustering (in which each node has its own cluster) is used as the initial\n"
           + "    clustering.\n"
+          + "--target-clustering <filename> (default: none)\n"
+          + "    Reads the target clustering from the specified file. The file is expected to\n"
+          + "    contain two tab-separated columns (without a header line), first a column of\n"
+          + "    nodes and then a column of clusters. Nodes and clusters are both represented\n"
+          + "    by zero-index integer numbers. If no file is specified, no target clustering"
+          + "    is used. Note that not all nodes need to have a target cluster indicated.\n"
+          + "--target-clustering-weight <target weight> (default: 1)\n"
+          + "    Indicates the strength with which the target clustering is enforced. If this\n"
+          + "    parameter is set to 0, effectively no target clustering is enforced. If this\n"
+          + "    parameter is set infinitely high, the target clustering is essentially fixed,\n"
+          + "    and nodes should always be assigned to their target cluster.\n"
           + "-o --output-clustering <filename> (default: standard output)\n"
           + "    Write the final clustering to the specified file. If no file is specified,\n"
           + "    the standard output is used.\n";
@@ -155,6 +173,11 @@ public final class RunNetworkClustering
         String finalClusteringFilename = null;
         String edgeListFilename = null;
 
+        boolean useTargetClustering = false;
+        double targetClusteringWeight = DEFAULT_TARGET_CLUSTERING_WEIGHT;
+        String targetClusteringFilename = null;
+
+                
         int argIndex = 0;
         while (argIndex < args.length - 1)
         {
@@ -271,6 +294,31 @@ public final class RunNetworkClustering
                     initialClusteringFilename = args[argIndex + 1];
                     argIndex += 2;
                 }
+                else if (arg.equals("--target-clustering"))
+                {
+                    if ((argIndex + 1) >= args.length)
+                        throw new IllegalArgumentException("Missing value.");
+                    useTargetClustering = true;
+                    targetClusteringFilename = args[argIndex + 1];
+                    argIndex += 2;
+                }
+                else if (arg.equals("--target-clustering-weight"))
+                {
+                    try
+                    {
+                        if ((argIndex + 1) >= args.length)
+                            throw new NumberFormatException();
+                        targetClusteringWeight = Double.parseDouble(args[argIndex + 1]);
+                        if (targetClusteringWeight <= 0)
+                            throw new NumberFormatException();
+                    }
+                    catch (NumberFormatException e)
+                    {
+                        throw new IllegalArgumentException("Value must be a positive number.");
+                    }
+                    useTargetClustering = true;
+                    argIndex += 2;                    
+                }
                 else if (arg.equals("-o") || arg.equals("--output-clustering"))
                 {
                     if ((argIndex + 1) >= args.length)
@@ -314,6 +362,14 @@ public final class RunNetworkClustering
             initialClustering = readClustering(initialClusteringFilename, network.getNNodes());
             System.err.println("Initial clustering consists of " + initialClustering.getNClusters() + " clusters.");
         }
+        
+        Cover targetCover = null;
+        if (targetClusteringFilename != null)
+        {
+            System.err.println("Reading target clustering from '" + targetClusteringFilename + "'.");
+            targetCover = new Cover(readClustering(targetClusteringFilename, network.getNNodes(), false));
+            System.err.println("Target clustering consists of " + targetCover.getNCovers() + " clusters.");
+        }        
 
         // Run algorithm for network clustering.
         System.err.println("Running " + (useLouvain ? "Louvain" : "Leiden") + " algorithm.");
@@ -326,18 +382,30 @@ public final class RunNetworkClustering
         if (!useLouvain)
             System.err.println("Randomness parameter:         " + randomness);
         System.err.println("Random number generator seed: " + (useSeed ? seed : "random"));
-
+        if (useTargetClustering)
+            System.err.println("Target clustering weight:     " + targetClusteringWeight);
         long startTimeAlgorithm = System.currentTimeMillis();
         double resolution2 = useModularity ? (resolution / (2 * network.getTotalEdgeWeight() + network.getTotalEdgeWeightSelfLinks())) : resolution;
         Random random = useSeed ? new Random(seed) : new Random();
-        IterativeCPMClusteringAlgorithm algorithm = useLouvain ? new LouvainAlgorithm(resolution2, nIterations, random) : new LeidenAlgorithm(resolution2, nIterations, randomness, random);
+
         Clustering finalClustering = null;
         double maxQuality = Double.NEGATIVE_INFINITY;
         for (int i = 0; i < nRandomStarts; i++)
         {
             Clustering clustering = initialClustering.clone();
-            algorithm.improveClustering(network, clustering);
-            double quality = algorithm.calcQuality(network, clustering);
+            double quality;
+            if (useTargetClustering)
+            {
+                IterativeCPMClusteringAlgorithmLabeledTargetCover algorithm = new LeidenAlgorithmLabeledTargetCover(resolution2, nIterations, targetCover, targetClusteringWeight, randomness, random);
+                algorithm.improveClustering(network, clustering);
+                quality = algorithm.calcQuality(network, clustering);
+            }
+            else
+            {
+                IterativeCPMClusteringAlgorithm algorithm = useLouvain ? new LouvainAlgorithm(resolution2, nIterations, random) : new LeidenAlgorithm(resolution2, nIterations, randomness, random);
+                algorithm.improveClustering(network, clustering);
+                quality = algorithm.calcQuality(network, clustering);
+            }
             if (nRandomStarts > 1)
                 System.err.println("Quality function in random start " + (i + 1) + " equals " + quality + ".");
             if (quality > maxQuality)
@@ -479,6 +547,20 @@ public final class RunNetworkClustering
      */
     public static Clustering readClustering(String filename, int nNodes)
     {
+        return readClustering(filename, nNodes, true);
+    }
+
+    /**
+     * Reads a clustering from a file.
+     *
+     * @param filename Filename
+     * @param nNodes   Number of nodes
+     * @param warnMissingNodes Indicate if there are nodes missing
+     *
+     * @return Clustering
+     */    
+    public static Clustering readClustering(String filename, int nNodes, boolean warnMissingNodes)
+    {
         int[] clusters = new int[nNodes];
         Arrays.fill(clusters, -1);
         BufferedReader reader = null;
@@ -520,7 +602,7 @@ public final class RunNetworkClustering
 
                 line = reader.readLine();
             }
-            if (lineNo < nNodes)
+            if (warnMissingNodes && lineNo < nNodes)
                 throw new IOException("Missing nodes.");
         }
         catch (FileNotFoundException e)

@@ -173,6 +173,48 @@ public class Clustering implements Cloneable, Serializable
         return clusters[node];
     }
 
+
+    /**
+     * Gets clusters for all nodes.
+     *
+     * @return Cluster per node
+     * @see #getCluster(int node)
+     * @see #setCluster(int node, int cluster)
+     */
+    public boolean[] getClusterNotEmpty()
+    {
+        boolean[] clusterNotEmpty = new boolean[nClusters];
+        for (int i = 0; i < nNodes; i++)
+        {
+            int c = clusters[i];
+            if (c >= 0 && !clusterNotEmpty[c])
+            {
+                clusterNotEmpty[c] = true;
+            }
+        }
+        return clusterNotEmpty;
+    }
+    
+    /**
+     * @return Number of non-empty clusters.
+     * @see #getClusterNotEmpty()
+     */
+    public int getNNonEmptyClusters()
+    {
+        boolean[] clusterNotEmpty = new boolean[nClusters];
+        int nNonEmptyClusters = 0;
+        for (int i = 0; i < nNodes; i++)
+        {
+            int c = clusters[i];
+            if (c >= 0 && !clusterNotEmpty[c])
+            {
+                clusterNotEmpty[c] = true;
+                nNonEmptyClusters += 1;
+            }
+        }
+        return nNonEmptyClusters;
+    }
+
     /**
      * Returns the number of nodes per cluster.
      *
@@ -268,6 +310,123 @@ public class Clustering implements Cloneable, Serializable
         nClusters = i;
         for (i = 0; i < nNodes; i++)
             clusters[i] = newClusters[clusters[i]];
+    }
+
+
+    /**
+     * Remove empty clusters and relabel cluster to follow consecutive numbering
+     * only for clusters larger than the specified minimum number of clusters.
+     *
+     * <p>
+     * Each empty cluster larger that minimumNClusters is reassigned to the
+     * lowest available cluster, in the order of the existing clusters. For
+     * example, if {@code minimumNClusters = 5} and cluster 2 and 7 are empty,
+     * then cluster 8 is relabeled to 7 (and 9 to 8, etc...), but clusters 0-4
+     * remain as they are.
+     * </p>
+     *
+     * @param minimumNClusters Minimum number of cluster to maintain.
+     */
+    public void removeEmptyClustersLargerThan(int minimumNClusters)
+    {
+        // We only want to remove empty clusters larger than
+        // a certain minimum number of clusters, but we do
+        // not relable clusters in any way.
+        boolean[] nonEmptyCluster;
+        int i, j;
+        nonEmptyCluster = new boolean[nClusters];
+        for (i = 0; i < nNodes; i++)
+        {
+            if (clusters[i] >= 0)
+            {
+                nonEmptyCluster[clusters[i]] = true;
+            }
+        }
+        i = 0;
+        nClusters = nClusters - 1;
+        while (nClusters >= minimumNClusters && !nonEmptyCluster[nClusters])
+        {
+            nClusters--;
+        }
+        nClusters += 1;
+    }
+
+    /**
+     * Relabel clusters that have zero overlap with the {@code targetCover} to a
+     * cluster starting with {@code startingClusterIdWithoutOverlap}.
+     *
+     * <p>
+     * Each cluster that has zero overlap with the {@code targetCover} will be
+     * assigned the lowest available cluster that is larger than
+     * {@code startingClusterIdWithoutOverlap}. For example, if cluster 4 has
+     * zero overlap, and {@code startingClusterIdWithoutOverlap = 10} and the
+     * the lower available cluster is 11, cluster 4 will be relabeled as cluster
+     * 4.
+     * </p>
+     *
+     * @param targetCover Cover used to check if cluster has zero overlap.
+     * @param startingClusterIdWithoutOverlap Minimum cluster that is available
+     * for relabeling.
+     */
+    public void relabelClustersWithoutOverlap(Cover targetCover, int startingClusterIdWithoutOverlap)
+    {
+        // We relabel any cluster that has zero overlap with the target cover
+        // to a new cluster number that starts with the indicated cluster id
+        boolean[] nonEmptyCluster;
+        nonEmptyCluster = new boolean[nClusters];
+        for (int i = 0; i < nNodes; i++)
+        {
+            if (clusters[i] >= 0)
+            {
+                nonEmptyCluster[clusters[i]] = true;
+            }
+        }
+
+        Cover reducedCover = targetCover.createReducedCover(this);
+        int[] newCluster = new int[nClusters];
+        int newClusterId = startingClusterIdWithoutOverlap;
+        // Find first empty cluster (or set to nClusters otherwise)
+        while (newClusterId < nClusters
+                && (nonEmptyCluster[newClusterId]
+                || // Not empty
+                reducedCover.getCoverWeight(newClusterId, newClusterId) > 0)) // Has overlap
+        {
+            newClusterId++;
+        }
+        // First gather all empty clusters that should be moved
+        for (int i = 0; i < nClusters; i++)
+        {
+            // Only relabel non-empty clusters that don't overlap with their current cover.
+            if (nonEmptyCluster[i] && reducedCover.getCoverWeight(i, i) == 0)
+            {
+                newCluster[i] = newClusterId;
+                // Find first next empty cluster
+                newClusterId++;
+                // If next one wasn't empty or has overlap, find next one
+                while (newClusterId < nClusters
+                        && (nonEmptyCluster[newClusterId]
+                        || // Not empty
+                        reducedCover.getCoverWeight(newClusterId, newClusterId) > 0)) // Has overlap
+                {
+                    newClusterId++;
+                }
+            } else
+            {
+                newCluster[i] = i;
+            }
+        }
+        for (int i = 0; i < nNodes; i++)
+        {
+            if (clusters[i] >= 0)
+            {
+                newClusterId = newCluster[clusters[i]];
+                clusters[i] = newClusterId;
+                if (newClusterId + 1 > nClusters)
+                {
+                    nClusters = newClusterId + 1;
+                }
+            }
+        }
     }
 
     /**
