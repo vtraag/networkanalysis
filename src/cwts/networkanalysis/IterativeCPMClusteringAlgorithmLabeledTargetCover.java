@@ -1,6 +1,6 @@
 package cwts.networkanalysis;
 /**
- * Base class for modularity based clustering algorithm, taking into
+ * Base class for CPM based clustering algorithm, taking into
  * consideration a labeled target cover, that is iterated multiple times.
  *
  * @author Ludo Waltman
@@ -17,7 +17,7 @@ public abstract class IterativeCPMClusteringAlgorithmLabeledTargetCover extends 
     protected int nIterations;
 
     /**
-     * Constructs new iterated labeled target cover modularity algorithm for
+     * Constructs new iterated labeled target cover CPM algorithm for
      * specified resolution parameter, target cover and target weight using
      * the default number of iterations.
      *
@@ -29,7 +29,7 @@ public abstract class IterativeCPMClusteringAlgorithmLabeledTargetCover extends 
     }
 
     /**
-     * Constructs new iterated labeled target cover modularity algorithm for
+     * Constructs new iterated labeled target cover CPM algorithm for
      * specified resolution parameter, target cover and target weight using
      * the default number of iterations.
      *
@@ -43,7 +43,7 @@ public abstract class IterativeCPMClusteringAlgorithmLabeledTargetCover extends 
     }
     
     /**
-     * Constructs new iterated labeled target cover modularity algorithm for
+     * Constructs new iterated labeled target cover CPM algorithm for
      * specified resolution parameter, number of iterations,
      * target cover and target weight.
      *
