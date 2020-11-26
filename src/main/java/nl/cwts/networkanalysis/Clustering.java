@@ -42,32 +42,6 @@ public class Clustering implements Cloneable, Serializable
     protected int[] clusters;
 
     /**
-     * Loads a clustering from a file.
-     *
-     * @param filename File from which a clustering is loaded
-     *
-     * @return Loaded clustering
-     *
-     * @throws ClassNotFoundException Class not found
-     * @throws IOException            Could not read the file
-     *
-     * @see #save(String filename)
-     */
-    public static Clustering load(String filename) throws ClassNotFoundException, IOException
-    {
-        Clustering clustering;
-        ObjectInputStream objectInputStream;
-
-        objectInputStream = new ObjectInputStream(new FileInputStream(filename));
-
-        clustering = (Clustering)objectInputStream.readObject();
-
-        objectInputStream.close();
-
-        return clustering;
-    }
-
-    /**
      * Constructs a singleton clustering for a specified number of nodes.
      *
      * @param nNodes Number of nodes
@@ -88,6 +62,31 @@ public class Clustering implements Cloneable, Serializable
         nNodes = clusters.length;
         this.clusters = clusters.clone();
         nClusters = nl.cwts.util.Arrays.calcMaximum(clusters) + 1;
+    }
+
+    /**
+     * Loads a clustering from a file.
+     *
+     * @param filename File from which a clustering is loaded
+     *
+     * @return Loaded clustering
+     *
+     * @throws ClassNotFoundException Class not found
+     * @throws IOException            Could not read the file
+     * @see #save(String filename)
+     */
+    public static Clustering load(String filename) throws ClassNotFoundException, IOException
+    {
+        Clustering clustering;
+        ObjectInputStream objectInputStream;
+
+        objectInputStream = new ObjectInputStream(new FileInputStream(filename));
+
+        clustering = (Clustering)objectInputStream.readObject();
+
+        objectInputStream.close();
+
+        return clustering;
     }
 
     /**
@@ -117,7 +116,6 @@ public class Clustering implements Cloneable, Serializable
      * @param filename File in which the clustering is saved
      *
      * @throws IOException Could not write to the file
-     *
      * @see #load(String filename)
      */
     public void save(String filename) throws IOException
@@ -246,7 +244,6 @@ public class Clustering implements Cloneable, Serializable
      * Clusters are relabeled to follow a strictly consecutive numbering {@code
      * 0, ..., nClusters - 1}.
      * </p>
-     *
      */
     public void removeEmptyClusters()
     {
@@ -278,6 +275,41 @@ public class Clustering implements Cloneable, Serializable
     public void orderClustersByNNodes()
     {
         orderClustersByWeight(nl.cwts.util.Arrays.createDoubleArrayOfOnes(nNodes));
+    }
+
+
+    /**
+     * Determine the total node weight of all nodes per cluster.
+     *
+     * @param network Network with node weights.
+     *
+     * @return total node weight per cluster.
+     *
+     * @see #getClusterWeights(double[] nodeWeight)
+     */
+    public double[] getClusterWeights(Network network)
+    {
+        return getClusterWeights(network.nodeWeights);
+    }
+
+    /**
+     * Determine the total node weight of all nodes per cluster.
+     *
+     * @param nodeWeights array of node weights.
+     *
+     * @return total node weight per cluster.
+     *
+     * @see #getClusterWeights(Network network)
+     */
+    public double[] getClusterWeights(double[] nodeWeights)
+    {
+        double[] clusterWeight = new double[nClusters];
+        for (int i = 0; i < nNodes; i++)
+        {
+            if (clusters[i] >= 0)
+                clusterWeight[this.clusters[i]] += nodeWeights[i];
+        }
+        return clusterWeight;
     }
 
     /**
@@ -317,9 +349,8 @@ public class Clustering implements Cloneable, Serializable
         int i;
         int[] newClusters;
 
-        clusterWeights = new double[nClusters];
-        for (i = 0; i < nNodes; i++)
-            clusterWeights[this.clusters[i]] += nodeWeights[i];
+        clusterWeights = getClusterWeights(nodeWeights);
+
         clusters = new Cluster[nClusters];
         for (i = 0; i < nClusters; i++)
             clusters[i] = new Cluster(i, clusterWeights[i]);
